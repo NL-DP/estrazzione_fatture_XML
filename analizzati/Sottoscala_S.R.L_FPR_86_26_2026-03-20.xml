@@ -1,0 +1,110 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FatturaElettronica versione="FPR12" xmlns="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">
+  <FatturaElettronicaHeader xmlns="">
+    <DatiTrasmissione>
+      <IdTrasmittente>
+        <IdPaese>IT</IdPaese>
+        <IdCodice>01879020517</IdCodice>
+      </IdTrasmittente>
+      <ProgressivoInvio>86</ProgressivoInvio>
+      <FormatoTrasmissione>FPR12</FormatoTrasmissione>
+      <CodiceDestinatario>0000000</CodiceDestinatario>
+      <PECDestinatario>hello@bentoteca.com</PECDestinatario>
+    </DatiTrasmissione>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdPaese>IT</IdPaese>
+          <IdCodice>12496260964</IdCodice>
+        </IdFiscaleIVA>
+        <CodiceFiscale>12496260964</CodiceFiscale>
+        <Anagrafica>
+          <Denominazione>Sottoscala S.R.L.</Denominazione>
+        </Anagrafica>
+        <RegimeFiscale>RF01</RegimeFiscale>
+      </DatiAnagrafici>
+      <Sede>
+        <Indirizzo>Via Marcona</Indirizzo>
+        <CAP>20129</CAP>
+        <Comune>Milano</Comune>
+        <Provincia>MI</Provincia>
+        <Nazione>IT</Nazione>
+      </Sede>
+      <Contatti>
+        <Email>info@sottoscalawines.com</Email>
+      </Contatti>
+    </CedentePrestatore>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdPaese>IT</IdPaese>
+          <IdCodice>09729740960</IdCodice>
+        </IdFiscaleIVA>
+        <CodiceFiscale>09729740960</CodiceFiscale>
+        <Anagrafica>
+          <Denominazione>TOKUYOSHI S.R.L.</Denominazione>
+        </Anagrafica>
+      </DatiAnagrafici>
+      <Sede>
+        <Indirizzo>VIA GIUSEPPE SAPETO, 1</Indirizzo>
+        <CAP>20123</CAP>
+        <Comune>Milano</Comune>
+        <Provincia>MI</Provincia>
+        <Nazione>IT</Nazione>
+      </Sede>
+    </CessionarioCommittente>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody xmlns="">
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD01</TipoDocumento>
+        <Divisa>EUR</Divisa>
+        <Data>2026-03-20</Data>
+        <Numero>FPR 86/26</Numero>
+        <ImportoTotaleDocumento>1324.92</ImportoTotaleDocumento>
+      </DatiGeneraliDocumento>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <Descrizione>Batardiere Cuvee Lea 24</Descrizione>
+        <Quantita>6.00</Quantita>
+        <PrezzoUnitario>40.00</PrezzoUnitario>
+        <PrezzoTotale>240.00</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DettaglioLinee>
+        <NumeroLinea>2</NumeroLinea>
+        <Descrizione>Batardiere Plein Nord 22</Descrizione>
+        <Quantita>6.00</Quantita>
+        <PrezzoUnitario>25.00</PrezzoUnitario>
+        <PrezzoTotale>150.00</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DettaglioLinee>
+        <NumeroLinea>3</NumeroLinea>
+        <Descrizione>Cantalapiedra Majuelo el Espejo 23</Descrizione>
+        <Quantita>24.00</Quantita>
+        <PrezzoUnitario>29.00</PrezzoUnitario>
+        <PrezzoTotale>696.00</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DatiRiepilogo>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <ImponibileImporto>1086.00</ImponibileImporto>
+        <Imposta>238.92</Imposta>
+        <EsigibilitaIVA>I</EsigibilitaIVA>
+      </DatiRiepilogo>
+    </DatiBeniServizi>
+    <DatiPagamento>
+      <CondizioniPagamento>TP02</CondizioniPagamento>
+      <DettaglioPagamento>
+        <ModalitaPagamento>MP05</ModalitaPagamento>
+        <DataScadenzaPagamento>2026-03-20</DataScadenzaPagamento>
+        <ImportoPagamento>1324.92</ImportoPagamento>
+        <IstitutoFinanziario>Intesasanpaolo</IstitutoFinanziario>
+        <IBAN>IT90P0306901629100000075253</IBAN>
+      </DettaglioPagamento>
+    </DatiPagamento>
+  </FatturaElettronicaBody>
+</FatturaElettronica>
