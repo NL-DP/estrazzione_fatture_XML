@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import logging
+import tempfile
+import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +18,12 @@ log = logging.getLogger(__name__)
 SHEET_RIEPILOGO = "Riepilogo"
 SHEET_DETTAGLIO = "Dettaglio"
 
+# Formato data nativo Excel (DD/MM/YYYY visibile, ordinabile come data)
+FMT_DATE = "DD/MM/YYYY"
+FMT_CURRENCY = '#,##0.00 "EUR"'
+FMT_NUMBER = "#,##0.000"
+FMT_PERCENT = '0.00"%"'
+
 
 def _obj_get(obj: Any, key: str, default=None):
     if obj is None:
@@ -22,6 +31,21 @@ def _obj_get(obj: Any, key: str, default=None):
     if isinstance(obj, dict):
         return obj.get(key, default)
     return getattr(obj, key, default)
+
+
+def _parse_date(value: str):
+    """
+    Converte una stringa DD/MM/YYYY in oggetto datetime per Excel.
+    Restituisce il valore originale se non riconosciuto.
+    """
+    if not value:
+        return value
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt)
+        except (ValueError, TypeError):
+            pass
+    return value
 
 
 def _ensure_unfrozen(ws) -> None:
@@ -50,11 +74,12 @@ def _init_foglio_riepilogo(ws) -> None:
         cell.alignment = h_align
         ws.column_dimensions[get_column_letter(col_idx)].width = field["width"]
 
+    # Autofilter sulla riga header
+    ws.auto_filter.ref = ws.dimensions
     _ensure_unfrozen(ws)
 
 
 def _scrivi_righe_riepilogo(ws, testate: list[Any]) -> None:
-    fmt_currency = '#,##0.00 "EUR"'
     max_r = ws.max_row
 
     totale_row_idx = None
@@ -81,16 +106,27 @@ def _scrivi_righe_riepilogo(ws, testate: list[Any]) -> None:
         )
 
         for col_idx, field in enumerate(FIELD_MAP_RIEPILOGO, start=1):
-            value = _obj_get(testata, field["key"])
+            raw_value = _obj_get(testata, field["key"])
+            fmt = field.get("format", "text")
+
+            # Converti le date in oggetto datetime per Excel nativo
+            if fmt == "date" and isinstance(raw_value, str):
+                value = _parse_date(raw_value)
+            else:
+                value = raw_value
+
             cell = ws.cell(row=row_idx, column=col_idx, value=value)
             cell.fill = row_fill
             cell.font = row_font
 
-            fmt = field.get("format", "text")
             if fmt == "currency" and isinstance(value, (int, float)):
-                cell.number_format = fmt_currency
+                cell.number_format = FMT_CURRENCY
                 cell.alignment = Alignment(horizontal="right", vertical="center")
-            elif fmt in ("center", "date"):
+            elif fmt == "date":
+                if isinstance(value, datetime):
+                    cell.number_format = FMT_DATE
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            elif fmt == "center":
                 cell.alignment = Alignment(horizontal="center", vertical="center")
             else:
                 cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
@@ -112,7 +148,7 @@ def _scrivi_righe_riepilogo(ws, testate: list[Any]) -> None:
         if e_sum and stato_letter:
             col_letter = get_column_letter(col_idx)
             cell.value = f'=SUMIF({stato_letter}:{stato_letter}, "OK", {col_letter}:{col_letter})'
-            cell.number_format = fmt_currency
+            cell.number_format = FMT_CURRENCY
             cell.alignment = Alignment(horizontal="right", vertical="center")
         elif not label_scritto:
             cell.value = "TOTALE"
@@ -121,18 +157,17 @@ def _scrivi_righe_riepilogo(ws, testate: list[Any]) -> None:
         else:
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
+    # Aggiorna autofilter per coprire anche le nuove righe
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(FIELD_MAP_RIEPILOGO))}{nuovo_tot_idx - 1}"
+
 
 def _init_foglio_dettaglio(ws) -> None:
     for col_idx, field in enumerate(FIELD_MAP_DETTAGLIO, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = field["width"]
-
     _ensure_unfrozen(ws)
 
 
 def _scrivi_blocco_fattura(ws, testata: Any, linee: list[Any]) -> None:
-    fmt_currency = '#,##0.00 "EUR"'
-    fmt_number = "#,##0.000"
-    fmt_percent = '0.00"%"'
     n_cols = len(FIELD_MAP_DETTAGLIO)
 
     current_row = ws.max_row + 1
@@ -182,13 +217,13 @@ def _scrivi_blocco_fattura(ws, testata: Any, linee: list[Any]) -> None:
 
             fmt = field.get("format", "text")
             if fmt == "currency" and isinstance(value, (int, float)):
-                cell.number_format = fmt_currency
+                cell.number_format = FMT_CURRENCY
                 cell.alignment = Alignment(horizontal="right", vertical="center")
             elif fmt == "number" and isinstance(value, (int, float)):
-                cell.number_format = fmt_number
+                cell.number_format = FMT_NUMBER
                 cell.alignment = Alignment(horizontal="right", vertical="center")
             elif fmt == "percent" and isinstance(value, (int, float)):
-                cell.number_format = fmt_percent
+                cell.number_format = FMT_PERCENT
                 cell.alignment = Alignment(horizontal="center", vertical="center")
             elif fmt == "center":
                 cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -211,7 +246,7 @@ def _scrivi_blocco_fattura(ws, testata: Any, linee: list[Any]) -> None:
             cell = ws.cell(row=current_row, column=col_idx, value=_obj_get(testata, "totale"))
             cell.font = sub_font
             cell.fill = sub_fill
-            cell.number_format = fmt_currency
+            cell.number_format = FMT_CURRENCY
             cell.alignment = Alignment(horizontal="right", vertical="center")
         elif field["key"] not in ("codice", "descrizione"):
             cell = ws.cell(row=current_row, column=col_idx)
@@ -246,7 +281,6 @@ def build_excel(risultati: list[Any], output_path: Path) -> None:
         if ws_dettaglio.max_row == 1 and ws_dettaglio.cell(row=1, column=1).value is None:
             _init_foglio_dettaglio(ws_dettaglio)
 
-    # Rimuove il freeze anche dai file gia' esistenti caricati in append
     _ensure_unfrozen(ws_riepilogo)
     _ensure_unfrozen(ws_dettaglio)
 
@@ -258,9 +292,17 @@ def build_excel(risultati: list[Any], output_path: Path) -> None:
         if _obj_get(testata, "stato") == "OK":
             _scrivi_blocco_fattura(ws_dettaglio, testata, _result_linee(r))
 
+    # Salvataggio sicuro: scrive su file temp poi rinomina
+    # Evita crash se Excel ha il file aperto
+    tmp_path = output_path.with_suffix(".tmp.xlsx")
     try:
-        wb.save(str(output_path))
+        wb.save(str(tmp_path))
+        shutil.move(str(tmp_path), str(output_path))
     except PermissionError:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
         log.error(
             "Impossibile salvare '%s': file aperto in Excel. Chiuderlo e rieseguire.",
             output_path,

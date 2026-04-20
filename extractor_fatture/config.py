@@ -5,10 +5,8 @@ from __future__ import annotations
 CARTELLE = {
     "input": "da_analizzare",
     "analizzati": "analizzati",
+    "errori": "errori",
     "output_excel": "fatture_output.xlsx",
-    "output_riepilogo_csv": "fatture_riepilogo.csv",
-    "output_dettaglio_csv": "fatture_dettaglio.csv",
-    "output_errori_csv": "fatture_errori.csv",
 }
 
 SHEET_RIEPILOGO = "Riepilogo"
@@ -108,11 +106,4 @@ TIPO_DOCUMENTO = {
     "TD26": "Cessione beni amm.",
     "TD27": "Fattura autoconsumo",
     "TD28": "Acquisti San Marino",
-}
-
-CARTELLE = {
-    "input": "da_analizzare",
-    "analizzati": "analizzati",
-    "errori": "errori",
-    "output_excel": "fatture_output.xlsx",
 }
