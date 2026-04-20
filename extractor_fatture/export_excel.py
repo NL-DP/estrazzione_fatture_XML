@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import tempfile
 import shutil
 from datetime import datetime
 from pathlib import Path
