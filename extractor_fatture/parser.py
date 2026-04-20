@@ -24,18 +24,24 @@ from extractor_fatture.xml_utils import (
 )
 
 
-def is_service_line(desc: str, has_code: bool) -> bool:
+def is_service_line(desc: str, has_code: bool, prezzo_totale: float) -> bool:
     """
-    Determina se una riga DettaglioLinee è una riga di servizio da escludere.
+    Determina se una riga DettaglioLinee è una riga informativa da escludere.
+
+    Regola principale: una riga articolo reale ha sempre CodiceArticolo
+    oppure un PrezzoTotale diverso da zero.
+    Le righe senza codice e con prezzo zero sono sempre righe di servizio
+    (separatori DDT, note, avvisi di non disponibilità, ecc.).
     """
+    # Riga con codice articolo: è sempre una riga reale da includere
     if has_code:
         return False
-    if desc.startswith("*"):
+
+    # Senza codice: è una riga di servizio se il prezzo è zero
+    if prezzo_totale == 0.0:
         return True
-    if desc.lower().startswith("destinaz"):
-        return True
-    if len(desc) > 120:
-        return True
+
+    # Senza codice ma con prezzo non zero: includi (caso raro ma possibile)
     return False
 
 
@@ -49,12 +55,12 @@ def parse_lines(body: ET.Element, invoice_id: str) -> list[RigaDettaglio]:
         descrizione = txt(line_el, "Descrizione")
         codice_el = line_el.find("CodiceArticolo")
         has_code = codice_el is not None
+        prezzo_totale = to_float(line_el, "PrezzoTotale") or 0.0
 
-        if is_service_line(descrizione, has_code):
+        if is_service_line(descrizione, has_code, prezzo_totale):
             continue
 
         quantita = to_float(line_el, "Quantita") or 0.0
-        prezzo_totale = to_float(line_el, "PrezzoTotale") or 0.0
         codice = txt(codice_el, "CodiceValore") if has_code else ""
 
         lines.append(
