@@ -4,143 +4,129 @@ Elabora file XML di fattura elettronica italiana (FPR12/SDI) e produce un file E
 
 ---
 
-## Scarica il programma (nessuna installazione richiesta)
+## Scarica
 
 Vai alla pagina **[Releases](../../releases)** e scarica il file per il tuo sistema:
 
 | File | Sistema |
 |---|---|
-| `FattureXML-windows.exe` | Windows 10/11 |
+| `FattureXML-windows.zip` | Windows 10/11 |
+| `FattureXML-macos.zip` | macOS 12+ (Intel e Apple Silicon) |
 | `FattureXML-linux` | Linux (Ubuntu, Debian, ecc.) |
-| `FattureXML-macos` | macOS 12+ (Intel e Apple Silicon via Rosetta) |
+
+Non serve installare Python né nessun altro programma.
 
 ---
 
-## Come usarlo
+## Windows
 
-Crea una cartella di lavoro con questa struttura:
+1. Scarica `FattureXML-windows.zip` dalla pagina Releases
+2. Estrai lo zip in una cartella a piacere
+3. Metti i file XML in `da_analizzare/`
+4. Doppio clic su **FattureXML.bat**
+5. Il risultato è in `fatture_output.xlsx`
 
 ```
 FattureXML/
-├── FattureXML-windows.exe   ← l'eseguibile scaricato
-├── da_analizzare/           ← metti qui i file XML
-├── analizzati/              (creata automaticamente)
-└── errori/                  (creata automaticamente)
-```
-
-Fai doppio clic sull'eseguibile oppure lancialo da terminale. Produce `fatture_output.xlsx` nella stessa cartella.
-
-### Opzioni da riga di comando
-
-```
-FattureXML-windows.exe --input CARTELLA_XML --output PERCORSO.xlsx
-FattureXML-windows.exe --version
-FattureXML-windows.exe --help
+├── FattureXML.bat          ← doppio clic per avviare
+├── da_analizzare/          ← metti qui i file XML
+├── analizzati/             ← fatture elaborate (automatica)
+├── errori/                 ← file con problemi (automatica)
+├── fatture_output.xlsx     ← risultato
+└── _runtime/               ← motore del programma, non toccare
 ```
 
 ---
 
-## Note per piattaforma
+## macOS
 
-### Windows
+1. Scarica `FattureXML-macos.zip` dalla pagina Releases
+2. Estrai lo zip
+3. Metti i file XML in `da_analizzare/`
+4. Doppio clic su **FattureXML.command**
 
-Il binario è compilato con Nuitka (GCC/MinGW) e non è firmato con certificato digitale. Alcuni antivirus potrebbero mostrare un avviso al primo avvio — è un falso positivo comune per tutti gli eseguibili Python compilati non firmati. Il programma non accede alla rete, non modifica file di sistema e opera solo nelle cartelle indicate.
+Se macOS dice "non può verificare lo sviluppatore":
+**Impostazioni di Sistema → Privacy e Sicurezza → scorri in basso → "Apri comunque"**
 
-Se Windows Defender blocca il file: **Altre informazioni → Esegui comunque**.
+Oppure da Terminale:
 
-### macOS
+```bash
+chmod +x FattureXML.command
+./FattureXML.command
+```
 
-La prima volta fai **tasto destro → Apri → Apri** per bypassare Gatekeeper.
+---
 
-Su Apple Silicon (M1/M2/M3) il binario gira tramite Rosetta 2 (già incluso nel sistema).
-
-### Linux
+## Linux
 
 ```bash
 chmod +x FattureXML-linux
+mkdir -p da_analizzare
+# copia i file XML in da_analizzare/
 ./FattureXML-linux
 ```
 
 ---
 
-## Esecuzione da sorgente (sviluppatori)
+## Come funziona
+
+Il programma:
+
+1. Legge tutti i file XML dalla cartella `da_analizzare/`
+2. Estrae i dati di ogni fattura (fornitore, cliente, importi, articoli, pagamento)
+3. Scrive tutto in `fatture_output.xlsx` con due fogli:
+   - **Riepilogo** — una riga per fattura con totali, stato, scadenza
+   - **Dettaglio** — una riga per articolo, filtrabile
+4. Sposta i file elaborati in `analizzati/`, quelli con errori in `errori/`
+5. Se il file Excel esiste già, aggiunge le nuove fatture senza duplicati
+
+### Formati supportati
+
+- Fatture elettroniche FPR12 (formato SDI)
+- File XML singoli o lotti con più fatture nello stesso file
+- Tutti i tipi documento: TD01 (fattura), TD04 (nota di credito), TD24 (differita), ecc.
+
+### Opzioni avanzate (da terminale)
+
+```
+FattureXML.bat --input ALTRA_CARTELLA --output ALTRO_FILE.xlsx
+FattureXML.bat --version
+FattureXML.bat --help
+```
+
+---
+
+## Per sviluppatori
+
+### Esecuzione da sorgente
 
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
 
----
+### Struttura del codice
 
-## Build locale (senza CI)
-
-### Prerequisiti
-
-- Python 3.11
-- Su Linux: `sudo apt install patchelf ccache`
-
-### Comandi
-
-```bash
-pip install -r requirements.txt
-pip install "nuitka>=2.1" ordered-set zstandard
-
-# Genera icona (una volta sola)
-python scripts/generate_icon.py
-
-# Windows
-python -m nuitka --onefile --standalone --follow-imports --mingw64 \
-  --onefile-no-compression \
-  --include-package=extractor_fatture --include-package=openpyxl \
-  --include-package=et_xmlfile --include-package-data=openpyxl \
-  --nofollow-import-to=tkinter --nofollow-import-to=matplotlib \
-  --nofollow-import-to=numpy --nofollow-import-to=pandas \
-  --nofollow-import-to=setuptools --nofollow-import-to=pip \
-  --windows-console-mode=attach --windows-uac-admin=no \
-  --company-name=FattureXML --product-name=FattureXML \
-  --file-version=1.0.0.0 --product-version=1.0.0.0 \
-  --file-description="Estrazione fatture elettroniche XML" \
-  --windows-icon-from-ico=assets/icon.ico \
-  --assume-yes-for-downloads \
-  --output-filename=FattureXML-windows.exe --output-dir=dist \
-  main.py
-
-# Linux
-python -m nuitka --onefile --standalone --follow-imports \
-  --include-package=extractor_fatture --include-package=openpyxl \
-  --include-package=et_xmlfile --include-package-data=openpyxl \
-  --nofollow-import-to=tkinter --nofollow-import-to=matplotlib \
-  --nofollow-import-to=numpy --nofollow-import-to=pandas \
-  --nofollow-import-to=setuptools --nofollow-import-to=pip \
-  --assume-yes-for-downloads \
-  --output-filename=FattureXML-linux --output-dir=dist \
-  main.py
-
-# macOS
-python -m nuitka --onefile --standalone --follow-imports \
-  --include-package=extractor_fatture --include-package=openpyxl \
-  --include-package=et_xmlfile --include-package-data=openpyxl \
-  --nofollow-import-to=tkinter --nofollow-import-to=matplotlib \
-  --nofollow-import-to=numpy --nofollow-import-to=pandas \
-  --nofollow-import-to=setuptools --nofollow-import-to=pip \
-  --assume-yes-for-downloads \
-  --output-filename=FattureXML-macos --output-dir=dist \
-  main.py
-codesign --deep --force --options runtime --sign '-' dist/FattureXML-macos
+```
+extractor_fatture/
+├── config.py          — configurazione cartelle, campi Excel, codici pagamento
+├── parser.py          — parsing XML fattura elettronica
+├── xml_utils.py       — utility lettura nodi XML
+├── models.py          — dataclass TestataFattura, RigaDettaglio
+├── dedupe.py          — deduplica fatture già importate
+├── export_excel.py    — generazione file Excel (Riepilogo + Dettaglio)
+├── storage.py         — gestione file e cartelle
+└── version.py         — versione del programma
 ```
 
----
-
-## Release
-
-Per creare una nuova release:
+### Nuova release
 
 ```bash
-# Aggiorna la versione in extractor_fatture/version.py
-# Poi:
-git add -A && git commit -m "release v1.1.0"
-git tag v1.1.0
+# 1. Aggiorna la versione in extractor_fatture/version.py
+# 2. Commit e tag
+git add -A && git commit -m "release vX.Y.Z"
+git tag vX.Y.Z
 git push && git push --tags
 ```
 
-Il workflow GitHub Actions compila automaticamente per tutte le piattaforme e pubblica i binari nella release.
+Il workflow GitHub Actions compila automaticamente per tutte le piattaforme e pubblica i file nella Release.
