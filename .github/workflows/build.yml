@@ -66,6 +66,7 @@ jobs:
           Remove-Item -Recurse -Force "$sitePackages\setuptools*" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "$sitePackages\wheel*" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "$sitePackages\_distutils_hack*" -ErrorAction SilentlyContinue
+          Remove-Item -Force "$sitePackages\distutils-precedence.pth" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "$RT\python\Scripts" -ErrorAction SilentlyContinue
 
           # 5. Copia codice sorgente in _runtime
