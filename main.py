@@ -35,24 +35,18 @@ def get_base_dir() -> Path:
     Restituisce la cartella base dove cercare da_analizzare/, analizzati/, ecc.
 
     Compatibile con:
-      - Nuitka --onefile  -> __nuitka_binary_dir punta alla cartella dell'exe
-      - Nuitka standalone -> __compiled__ presente, sys.executable e' il binario
-      - PyInstaller       -> sys.frozen == True
-      - Esecuzione da sorgente Python
+      - Nuitka --onefile  -> sys.argv[0] punta al binario originale
+      - Nuitka standalone -> sys.argv[0] punta al binario nella .dist
+      - PyInstaller       -> sys.frozen == True, sys.executable e' il binario
+      - Esecuzione da sorgente Python -> sys.argv[0] e' main.py
     """
-    # Nuitka onefile: __nuitka_binary_dir__ e' una stringa globale iniettata
-    # dal runtime, punta alla directory dove risiede l'exe originale
-    # (NON la cartella temporanea di estrazione)
-    nuitka_bin_dir = globals().get("__nuitka_binary_dir__")
-    if nuitka_bin_dir:
-        return Path(nuitka_bin_dir).resolve()
-
-    # Nuitka standalone (non onefile) o PyInstaller
-    if "__compiled__" in dir() or getattr(sys, "frozen", False):
+    # PyInstaller: sys.executable punta al binario, non all'interprete
+    if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
 
-    # Sorgente Python normale
-    return Path(__file__).resolve().parent
+    # Nuitka e sorgente Python: sys.argv[0] punta sempre al file/binario
+    # che e' stato lanciato, anche in Nuitka onefile (NON la temp dir)
+    return Path(sys.argv[0]).resolve().parent
 
 
 def print_banner(input_dir: Path, analizzati_dir: Path, errori_dir: Path, output_path: Path) -> None:
