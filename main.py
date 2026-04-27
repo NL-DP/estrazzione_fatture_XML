@@ -35,18 +35,24 @@ def get_base_dir() -> Path:
     Restituisce la cartella base dove cercare da_analizzare/, analizzati/, ecc.
 
     Compatibile con:
-      - Nuitka --onefile  -> sys.argv[0] punta al binario originale
-      - Nuitka standalone -> sys.argv[0] punta al binario nella .dist
-      - PyInstaller       -> sys.frozen == True, sys.executable e' il binario
-      - Esecuzione da sorgente Python -> sys.argv[0] e' main.py
+      - Pacchetto portatile  -> main.py sta in _runtime/, risale al padre
+      - Nuitka --onefile     -> sys.argv[0] punta al binario originale
+      - PyInstaller          -> sys.frozen == True
+      - Esecuzione da sorgente Python
     """
-    # PyInstaller: sys.executable punta al binario, non all'interprete
+    # PyInstaller
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
 
-    # Nuitka e sorgente Python: sys.argv[0] punta sempre al file/binario
-    # che e' stato lanciato, anche in Nuitka onefile (NON la temp dir)
-    return Path(sys.argv[0]).resolve().parent
+    # Determina la cartella dove si trova main.py
+    script_dir = Path(sys.argv[0]).resolve().parent
+
+    # Pacchetto portatile: main.py sta in _runtime/
+    # Le cartelle di lavoro (da_analizzare, analizzati, ecc.) stanno un livello sopra
+    if script_dir.name == "_runtime":
+        return script_dir.parent
+
+    return script_dir
 
 
 def print_banner(input_dir: Path, analizzati_dir: Path, errori_dir: Path, output_path: Path) -> None:

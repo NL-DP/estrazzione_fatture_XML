@@ -11,7 +11,20 @@ permissions:
 
 jobs:
   # ================================================================
-  #  WINDOWS — Python embedded portatile (zero AV)
+  #  WINDOWS — Python embedded portatile
+  #
+  #  Struttura finale per l'utente:
+  #
+  #  FattureXML/
+  #  ├── FattureXML.bat          <- doppio clic
+  #  ├── da_analizzare/          <- metti qui gli XML
+  #  ├── analizzati/             <- creata automaticamente
+  #  ├── errori/                 <- creata automaticamente
+  #  └── _runtime/               <- NON TOCCARE
+  #      ├── python/
+  #      ├── main.py
+  #      └── extractor_fatture/
+  #
   # ================================================================
   build-windows:
     runs-on: windows-latest
@@ -28,58 +41,78 @@ jobs:
         shell: powershell
         run: |
           $OUT = "FattureXML"
-          New-Item -ItemType Directory -Path $OUT -Force
+          $RT  = "$OUT\_runtime"
+          New-Item -ItemType Directory -Path $RT -Force | Out-Null
 
-          # 1. Scarica Python embeddable ufficiale (firmato Microsoft)
+          # 1. Scarica Python embeddable ufficiale
           $pyUrl = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
           Invoke-WebRequest -Uri $pyUrl -OutFile python-embed.zip
-          Expand-Archive python-embed.zip -DestinationPath "$OUT\python"
+          Expand-Archive python-embed.zip -DestinationPath "$RT\python"
 
-          # 2. Configura i percorsi di import
-          #    Il .pth controlla dove Python embedded cerca i moduli.
-          #    Aggiungiamo ".." perché python.exe sta in python\ e il
-          #    codice (main.py, extractor_fatture/) sta una cartella sopra.
-          $pthFile = Get-ChildItem "$OUT\python\python311._pth"
-          (Get-Content $pthFile) -replace '#import site','import site' |
-            Set-Content $pthFile
-          Add-Content $pthFile ".."
+          # 2. Configura .pth: import site + percorso cartella _runtime
+          $pthFile = "$RT\python\python311._pth"
+          $content = (Get-Content $pthFile) -replace '#import site','import site'
+          $content += ".."
+          Set-Content $pthFile -Value $content
 
           # 3. Installa pip e openpyxl
           Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile get-pip.py
-          & "$OUT\python\python.exe" get-pip.py --no-warn-script-location 2>&1 | Out-Null
-          & "$OUT\python\python.exe" -m pip install openpyxl --no-warn-script-location 2>&1 | Out-Null
+          & "$RT\python\python.exe" get-pip.py --no-warn-script-location 2>&1 | Out-Null
+          & "$RT\python\python.exe" -m pip install openpyxl --no-warn-script-location 2>&1 | Out-Null
 
-          # 4. Copia codice sorgente
-          Copy-Item main.py "$OUT\"
-          Copy-Item -Recurse extractor_fatture "$OUT\extractor_fatture"
+          # 4. Rimuovi pip/setuptools/wheel dal pacchetto (non servono all'utente)
+          $sitePackages = "$RT\python\Lib\site-packages"
+          Remove-Item -Recurse -Force "$sitePackages\pip*" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$sitePackages\setuptools*" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$sitePackages\wheel*" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$sitePackages\_distutils_hack*" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$RT\python\Scripts" -ErrorAction SilentlyContinue
 
-          # 5. Crea launcher .bat
-          $bat = '@echo off' + "`r`n"
-          $bat += 'cd /d "%~dp0"' + "`r`n"
-          $bat += 'python\python.exe main.py %*' + "`r`n"
-          $bat += 'if %errorlevel% neq 0 pause' + "`r`n"
-          Set-Content "$OUT\FattureXML.bat" -Encoding ASCII -Value $bat -NoNewline
+          # 5. Copia codice sorgente in _runtime
+          Copy-Item main.py "$RT\"
+          Copy-Item -Recurse extractor_fatture "$RT\extractor_fatture"
 
-          # 6. Cartella input
+          # 6. Crea launcher .bat nella root (punta a _runtime)
+          $lines = @(
+            '@echo off'
+            'cd /d "%~dp0"'
+            '_runtime\python\python.exe _runtime\main.py %*'
+            'pause'
+          )
+          $lines -join "`r`n" | Out-File -FilePath "$OUT\FattureXML.bat" -Encoding ascii
+
+          # 7. Cartella input
           New-Item -ItemType Directory -Path "$OUT\da_analizzare" -Force | Out-Null
-          Set-Content "$OUT\da_analizzare\LEGGIMI.txt" "Metti qui i file XML delle fatture elettroniche."
 
-          # 7. Zip
+          # 8. Verifica
+          Write-Host "=== Struttura ==="
+          Get-ChildItem $OUT -Name
+          Write-Host "=== _runtime ==="
+          Get-ChildItem $RT -Name
+          Write-Host "=== Test import ==="
+          & "$RT\python\python.exe" -c "from extractor_fatture.config import CARTELLE; print('IMPORT OK')"
+
+          # 9. Zip
           Compress-Archive -Path "$OUT\*" -DestinationPath "FattureXML-windows.zip" -Force
           Write-Host "Creato: FattureXML-windows.zip"
 
       - name: Smoke test
-        shell: cmd
+        shell: powershell
         run: |
-          mkdir test_smoke
-          powershell Expand-Archive FattureXML-windows.zip -DestinationPath test_smoke
-          cd test_smoke
-          call FattureXML.bat
-          if not exist analizzati (
-            echo FAIL
-            exit /b 1
-          )
-          echo SMOKE TEST WINDOWS OK
+          New-Item -ItemType Directory -Path test_smoke | Out-Null
+          Expand-Archive FattureXML-windows.zip -DestinationPath test_smoke
+          Set-Location test_smoke
+
+          Write-Host "=== Contenuto visibile utente ==="
+          Get-ChildItem -Name
+
+          & cmd /c "FattureXML.bat"
+
+          if (-not (Test-Path "analizzati")) {
+            Write-Host "FAIL"
+            exit 1
+          }
+          Write-Host "SMOKE TEST WINDOWS OK"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -95,9 +128,7 @@ jobs:
           fail_on_unmatched_files: false
 
   # ================================================================
-  #  MACOS — Python standalone portatile (no Gatekeeper issues)
-  #  Usa python-build-standalone: build ufficiali Python precompilati
-  #  e portabili, non richiedono installazione.
+  #  MACOS — Python standalone portatile (stessa struttura pulita)
   # ================================================================
   build-macos:
     runs-on: macos-13
@@ -109,46 +140,46 @@ jobs:
         run: |
           set -e
           OUT="FattureXML"
-          mkdir -p "$OUT"
+          RT="$OUT/_runtime"
+          mkdir -p "$RT"
 
-          # 1. Scarica Python standalone portatile (x86_64, gira su ARM via Rosetta)
+          # 1. Scarica Python standalone portatile
           PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9+20240415-x86_64-apple-darwin-install_only.tar.gz"
           curl -L -o python-standalone.tar.gz "$PY_URL"
-          mkdir -p "$OUT/python"
-          tar xzf python-standalone.tar.gz -C "$OUT/python" --strip-components=1
+          mkdir -p "$RT/python"
+          tar xzf python-standalone.tar.gz -C "$RT/python" --strip-components=1
 
-          # 2. Installa openpyxl nel Python portatile
-          "$OUT/python/bin/python3" -m pip install openpyxl --quiet 2>/dev/null
+          # 2. Installa openpyxl
+          "$RT/python/bin/python3" -m pip install openpyxl --quiet 2>/dev/null
 
-          # 3. Copia codice sorgente
-          cp main.py "$OUT/"
-          cp -r extractor_fatture "$OUT/extractor_fatture"
+          # 3. Rimuovi pip/setuptools (non servono)
+          SITE="$RT/python/lib/python3.11/site-packages"
+          rm -rf "$SITE/pip"* "$SITE/setuptools"* "$SITE/wheel"* "$SITE/_distutils_hack"* 2>/dev/null
 
-          # 4. Crea launcher shell script
-          cat > "$OUT/FattureXML.command" << 'LAUNCHER'
-          #!/bin/bash
-          cd "$(dirname "$0")"
-          ./python/bin/python3 main.py "$@"
-          LAUNCHER
-          # Rimuovi indentazione
-          sed -i '' 's/^          //' "$OUT/FattureXML.command"
+          # 4. Copia codice sorgente in _runtime
+          cp main.py "$RT/"
+          cp -r extractor_fatture "$RT/extractor_fatture"
+
+          # 5. Crea launcher .command nella root
+          printf '#!/bin/bash\ncd "$(dirname "$0")"\n./_runtime/python/bin/python3 _runtime/main.py "$@"\n' > "$OUT/FattureXML.command"
           chmod +x "$OUT/FattureXML.command"
 
-          # 5. Cartella input
+          # 6. Cartella input
           mkdir -p "$OUT/da_analizzare"
-          echo "Metti qui i file XML delle fatture elettroniche." > "$OUT/da_analizzare/LEGGIMI.txt"
 
-          # 6. Zip (il .command mantiene il permesso +x dentro lo zip)
+          # 7. Verifica
+          echo "=== Test import ==="
+          cd "$RT" && ./python/bin/python3 -c "from extractor_fatture.config import CARTELLE; print('OK')" && cd ../..
+
+          # 8. Zip
           cd "$OUT"
-          zip -r ../FattureXML-macos.zip . -x "*.pyc" "__pycache__/*"
+          zip -r ../FattureXML-macos.zip . -x "*.pyc" "*__pycache__*"
           cd ..
           echo "Creato: FattureXML-macos.zip"
-          ls -lh FattureXML-macos.zip
 
       - name: Smoke test
         run: |
-          mkdir test_smoke
-          cd test_smoke
+          mkdir test_smoke && cd test_smoke
           unzip ../FattureXML-macos.zip
           bash FattureXML.command
           test -d analizzati && echo "SMOKE TEST MACOS OK" || (echo "FAIL" && exit 1)
@@ -167,7 +198,7 @@ jobs:
           fail_on_unmatched_files: false
 
   # ================================================================
-  #  LINUX — Nuitka onefile (Linux non ha problemi AV)
+  #  LINUX — Nuitka onefile
   # ================================================================
   build-linux:
     runs-on: ubuntu-22.04
