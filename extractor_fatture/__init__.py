@@ -8,4 +8,5 @@ __all__ = [
     "export_excel",
     "storage",
     "xml_utils",
+    "version",
 ]

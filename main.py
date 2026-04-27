@@ -18,6 +18,7 @@ from extractor_fatture.storage import (
     error_xml_name,
     glob_xml_files,
 )
+from extractor_fatture.version import __version__
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,15 +31,34 @@ log = logging.getLogger(__name__)
 
 
 def get_base_dir() -> Path:
-    if getattr(sys, "frozen", False):
+    """
+    Restituisce la cartella base dove cercare da_analizzare/, analizzati/, ecc.
+
+    Compatibile con:
+      - Nuitka --onefile  -> __nuitka_binary_dir punta alla cartella dell'exe
+      - Nuitka standalone -> __compiled__ presente, sys.executable e' il binario
+      - PyInstaller       -> sys.frozen == True
+      - Esecuzione da sorgente Python
+    """
+    # Nuitka onefile: __nuitka_binary_dir__ e' una stringa globale iniettata
+    # dal runtime, punta alla directory dove risiede l'exe originale
+    # (NON la cartella temporanea di estrazione)
+    nuitka_bin_dir = globals().get("__nuitka_binary_dir__")
+    if nuitka_bin_dir:
+        return Path(nuitka_bin_dir).resolve()
+
+    # Nuitka standalone (non onefile) o PyInstaller
+    if "__compiled__" in dir() or getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
+
+    # Sorgente Python normale
     return Path(__file__).resolve().parent
 
 
 def print_banner(input_dir: Path, analizzati_dir: Path, errori_dir: Path, output_path: Path) -> None:
     print()
     print("=" * 62)
-    print(" EXTRACTOR FATTURE ELETTRONICHE (FPR12 / SDI)")
+    print(f" EXTRACTOR FATTURE ELETTRONICHE v{__version__} (FPR12 / SDI)")
     print("=" * 62)
     print(f" Input    : {input_dir.resolve()}")
     print(f" Archivio : {analizzati_dir.resolve()}")
@@ -80,6 +100,7 @@ def print_summary(ok: int, skip: int, errori: int, righe: int, output_path: Path
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Estrazione fatture XML verso Excel")
+    parser.add_argument("--version", action="version", version=f"FattureXML {__version__}")
     parser.add_argument("--input", default=None, help="Cartella XML input")
     parser.add_argument("--analizzati", default=None, help="Cartella archivio XML elaborati")
     parser.add_argument("--errori", default=None, help="Cartella XML con errori")

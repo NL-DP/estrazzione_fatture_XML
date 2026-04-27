@@ -17,9 +17,9 @@ jobs:
         include:
           - os: windows-latest
             asset_name: FattureXML-windows.exe
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             asset_name: FattureXML-linux
-          - os: macos-latest
+          - os: macos-13
             asset_name: FattureXML-macos
 
     runs-on: ${{ matrix.os }}
@@ -28,10 +28,10 @@ jobs:
       - name: Checkout sorgente
         uses: actions/checkout@v4
 
-      - name: Setup Python 3.12
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Installa dipendenze di sistema (Linux)
         if: runner.os == 'Linux'
@@ -43,13 +43,87 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install "nuitka[onefile]" ordered-set zstandard
+          pip install "nuitka>=2.1" ordered-set zstandard
 
+      - name: Leggi versione
+        id: ver
+        shell: bash
+        run: |
+          VER=$(python -c "from extractor_fatture.version import __version__; print(__version__)")
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Versione rilevata: $VER"
+
+      - name: Check icona
+        id: ico
+        shell: bash
+        run: |
+          if [ -f "assets/icon.ico" ]; then
+            echo "flag=--windows-icon-from-ico=assets/icon.ico" >> "$GITHUB_OUTPUT"
+            echo "Icona trovata"
+          else
+            echo "flag=" >> "$GITHUB_OUTPUT"
+            echo "Icona non trovata, build senza icona"
+          fi
+
+      # ================================================================
+      #  WINDOWS
+      # ================================================================
       - name: Build con Nuitka (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
-        run: python -m nuitka --onefile --standalone --follow-imports --include-package=extractor_fatture --include-package=openpyxl --include-package=et_xmlfile --windows-console-mode=attach --assume-yes-for-downloads --output-filename=FattureXML-windows.exe --output-dir=dist main.py
+        shell: bash
+        run: |
+          python -m nuitka \
+            --onefile \
+            --standalone \
+            --follow-imports \
+            --mingw64 \
+            --onefile-no-compression \
+            --include-package=extractor_fatture \
+            --include-package=openpyxl \
+            --include-package=et_xmlfile \
+            --include-package-data=openpyxl \
+            --nofollow-import-to=tkinter \
+            --nofollow-import-to=matplotlib \
+            --nofollow-import-to=numpy \
+            --nofollow-import-to=pandas \
+            --nofollow-import-to=scipy \
+            --nofollow-import-to=PIL \
+            --nofollow-import-to=setuptools \
+            --nofollow-import-to=pip \
+            --nofollow-import-to=unittest \
+            --nofollow-import-to=test \
+            --nofollow-import-to=distutils \
+            --nofollow-import-to=pydoc \
+            --nofollow-import-to=doctest \
+            --windows-console-mode=attach \
+            --company-name=FattureXML \
+            --product-name=FattureXML \
+            --file-version="${{ steps.ver.outputs.version }}.0" \
+            --product-version="${{ steps.ver.outputs.version }}.0" \
+            --file-description="Estrazione fatture elettroniche XML verso Excel" \
+            ${{ steps.ico.outputs.flag }} \
+            --assume-yes-for-downloads \
+            --output-filename=FattureXML-windows.exe \
+            --output-dir=dist \
+            main.py
 
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir test_run
+          cp dist/FattureXML-windows.exe test_run/
+          cd test_run
+          ./FattureXML-windows.exe
+          if [ ! -d "da_analizzare" ]; then
+            echo "ERRORE: cartella da_analizzare non creata"
+            exit 1
+          fi
+          echo "SMOKE TEST WINDOWS OK"
+
+      # ================================================================
+      #  LINUX
+      # ================================================================
       - name: Build con Nuitka (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -60,10 +134,34 @@ jobs:
             --include-package=extractor_fatture \
             --include-package=openpyxl \
             --include-package=et_xmlfile \
+            --include-package-data=openpyxl \
+            --nofollow-import-to=tkinter \
+            --nofollow-import-to=matplotlib \
+            --nofollow-import-to=numpy \
+            --nofollow-import-to=pandas \
+            --nofollow-import-to=setuptools \
+            --nofollow-import-to=pip \
+            --nofollow-import-to=unittest \
+            --nofollow-import-to=test \
+            --nofollow-import-to=distutils \
+            --nofollow-import-to=pydoc \
+            --nofollow-import-to=doctest \
+            --assume-yes-for-downloads \
             --output-filename=FattureXML-linux \
             --output-dir=dist \
             main.py
 
+      - name: Smoke test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir test_run && cp dist/FattureXML-linux test_run/
+          cd test_run && chmod +x FattureXML-linux
+          ./FattureXML-linux
+          test -d da_analizzare && echo "SMOKE TEST LINUX OK" || (echo "FAIL" && exit 1)
+
+      # ================================================================
+      #  MACOS
+      # ================================================================
       - name: Build con Nuitka (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -74,10 +172,36 @@ jobs:
             --include-package=extractor_fatture \
             --include-package=openpyxl \
             --include-package=et_xmlfile \
+            --include-package-data=openpyxl \
+            --nofollow-import-to=tkinter \
+            --nofollow-import-to=matplotlib \
+            --nofollow-import-to=numpy \
+            --nofollow-import-to=pandas \
+            --nofollow-import-to=setuptools \
+            --nofollow-import-to=pip \
+            --nofollow-import-to=unittest \
+            --nofollow-import-to=test \
+            --nofollow-import-to=distutils \
+            --nofollow-import-to=pydoc \
+            --nofollow-import-to=doctest \
+            --assume-yes-for-downloads \
             --output-filename=FattureXML-macos \
             --output-dir=dist \
             main.py
 
+      - name: Firma ad-hoc (macOS)
+        if: runner.os == 'macOS'
+        run: codesign --deep --force --options runtime --sign '-' dist/FattureXML-macos
+
+      - name: Smoke test (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir test_run && cp dist/FattureXML-macos test_run/
+          cd test_run && chmod +x FattureXML-macos
+          ./FattureXML-macos
+          test -d da_analizzare && echo "SMOKE TEST MACOS OK" || (echo "FAIL" && exit 1)
+
+      # ── UPLOAD ─────────────────────────────────────────────────────
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
