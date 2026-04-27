@@ -35,10 +35,14 @@ jobs:
           Invoke-WebRequest -Uri $pyUrl -OutFile python-embed.zip
           Expand-Archive python-embed.zip -DestinationPath "$OUT\python"
 
-          # 2. Abilita import site per i pacchetti pip
+          # 2. Configura i percorsi di import
+          #    Il .pth controlla dove Python embedded cerca i moduli.
+          #    Aggiungiamo ".." perché python.exe sta in python\ e il
+          #    codice (main.py, extractor_fatture/) sta una cartella sopra.
           $pthFile = Get-ChildItem "$OUT\python\python311._pth"
           (Get-Content $pthFile) -replace '#import site','import site' |
             Set-Content $pthFile
+          Add-Content $pthFile ".."
 
           # 3. Installa pip e openpyxl
           Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile get-pip.py
