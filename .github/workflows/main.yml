@@ -1,0 +1,203 @@
+name: Build multipiattaforma
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # fix deprecation Node 20
+
+jobs:
+  # ================================================================
+  #  WINDOWS
+  # ================================================================
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Crea pacchetto portatile
+        shell: powershell
+        run: |
+          $OUT = "FattureXML"
+          New-Item -ItemType Directory -Path $OUT -Force
+          $pyUrl = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
+          Invoke-WebRequest -Uri $pyUrl -OutFile python-embed.zip
+          Expand-Archive python-embed.zip -DestinationPath "$OUT\python"
+          $pthFile = Get-ChildItem "$OUT\python\python311._pth"
+          (Get-Content $pthFile) -replace '#import site','import site' |
+            Set-Content $pthFile
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile get-pip.py
+          & "$OUT\python\python.exe" get-pip.py --no-warn-script-location 2>&1 | Out-Null
+          & "$OUT\python\python.exe" -m pip install openpyxl --no-warn-script-location 2>&1 | Out-Null
+          Copy-Item main.py "$OUT\"
+          Copy-Item -Recurse extractor_fatture "$OUT\extractor_fatture"
+          $bat = '@echo off' + "`r`n"
+          $bat += 'cd /d "%~dp0"' + "`r`n"
+          $bat += 'python\python.exe main.py %*' + "`r`n"
+          $bat += 'if %errorlevel% neq 0 pause' + "`r`n"
+          Set-Content "$OUT\FattureXML.bat" -Encoding ASCII -Value $bat -NoNewline
+          New-Item -ItemType Directory -Path "$OUT\da_analizzare" -Force | Out-Null
+          Set-Content "$OUT\da_analizzare\LEGGIMI.txt" "Metti qui i file XML delle fatture elettroniche."
+          Compress-Archive -Path "$OUT\*" -DestinationPath "FattureXML-windows.zip" -Force
+          Write-Host "Creato: FattureXML-windows.zip"
+
+      - name: Smoke test
+        shell: powershell
+        run: |
+          Expand-Archive FattureXML-windows.zip -DestinationPath test_smoke
+          Set-Location test_smoke
+          # Esegui direttamente Python invece del .bat (evita problemi con cmd in CI)
+          .\python\python.exe main.py
+          # Il programma crea da_analizzare se non esiste, oppure analizzati se ci sono file.
+          # Qui verifichiamo solo che Python si avvii senza crash (exit code 0).
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "FAIL: main.py ha restituito exit code $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "SMOKE TEST WINDOWS OK"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FattureXML-windows.zip
+          path: FattureXML-windows.zip
+
+      - name: Pubblica su GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: FattureXML-windows.zip
+          fail_on_unmatched_files: false
+
+  # ================================================================
+  #  MACOS
+  # ================================================================
+  build-macos:
+    runs-on: macos-latest   # era macos-13: code d'attesa 24h → cambiato
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Crea pacchetto portatile macOS
+        run: |
+          set -e
+          OUT="FattureXML"
+          mkdir -p "$OUT"
+          # ARM (macos-latest = macos-14 Apple Silicon) → usiamo build arm64
+          PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9+20240415-aarch64-apple-darwin-install_only.tar.gz"
+          curl -L -o python-standalone.tar.gz "$PY_URL"
+          mkdir -p "$OUT/python"
+          tar xzf python-standalone.tar.gz -C "$OUT/python" --strip-components=1
+          "$OUT/python/bin/python3" -m pip install openpyxl --quiet
+          cp main.py "$OUT/"
+          cp -r extractor_fatture "$OUT/extractor_fatture"
+          cat > "$OUT/FattureXML.command" << 'LAUNCHER'
+#!/bin/bash
+cd "$(dirname "$0")"
+./python/bin/python3 main.py "$@"
+LAUNCHER
+          chmod +x "$OUT/FattureXML.command"
+          mkdir -p "$OUT/da_analizzare"
+          echo "Metti qui i file XML delle fatture elettroniche." > "$OUT/da_analizzare/LEGGIMI.txt"
+          cd "$OUT"
+          zip -r ../FattureXML-macos.zip . -x "*.pyc" -x "__pycache__/*"
+          cd ..
+          echo "Creato: FattureXML-macos.zip"
+          ls -lh FattureXML-macos.zip
+
+      - name: Smoke test
+        run: |
+          mkdir test_smoke && cd test_smoke
+          unzip ../FattureXML-macos.zip
+          # Avvia e verifica solo che Python non crashi
+          bash FattureXML.command
+          echo "SMOKE TEST MACOS OK"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FattureXML-macos.zip
+          path: FattureXML-macos.zip
+
+      - name: Pubblica su GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: FattureXML-macos.zip
+          fail_on_unmatched_files: false
+
+  # ================================================================
+  #  LINUX
+  # ================================================================
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installa dipendenze
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y patchelf ccache
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install "nuitka>=2.1" ordered-set zstandard
+
+      - name: Build
+        run: |
+          python -m nuitka \
+            --onefile --standalone --follow-imports \
+            --include-package=extractor_fatture \
+            --include-package=openpyxl \
+            --include-package=et_xmlfile \
+            --include-package-data=openpyxl \
+            --nofollow-import-to=tkinter \
+            --nofollow-import-to=matplotlib \
+            --nofollow-import-to=numpy \
+            --nofollow-import-to=pandas \
+            --nofollow-import-to=setuptools \
+            --nofollow-import-to=pip \
+            --nofollow-import-to=unittest \
+            --nofollow-import-to=test \
+            --nofollow-import-to=distutils \
+            --assume-yes-for-downloads \
+            --output-filename=FattureXML-linux \
+            --output-dir=dist \
+            main.py
+
+      - name: Smoke test
+        run: |
+          mkdir t && cp dist/FattureXML-linux t/ && cd t
+          chmod +x FattureXML-linux
+          ./FattureXML-linux
+          echo "SMOKE TEST LINUX OK"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FattureXML-linux
+          path: dist/FattureXML-linux
+
+      - name: Pubblica su GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/FattureXML-linux
+          fail_on_unmatched_files: false
